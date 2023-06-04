@@ -21,10 +21,29 @@ type user struct {
 	Password string `json:"password"`
 }
 
+type message struct {
+	Id        int    `json:"id"`
+	Content   string `json:"content"`
+	Senderid  int    `json:"senderid"`
+	Channelid int    `json:"channelid"`
+	Isdeleted int    `json:"isdeleted"`
+}
+
+type channel struct {
+	Id    int    `json:"id"`
+	About string `json:"about"`
+}
+
 var users = []user{}
+var messages = []message{}
+var channels = []channel{}
 
 func GetUsers(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, users)
+}
+
+func GetMessages(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, messages)
 }
 
 func Init() {
@@ -47,6 +66,18 @@ func ConvertDbUsers(t *testing.T) {
 	}
 }
 
+func ConvertMsg(t *testing.T) {
+	rows, _ := DB.Query("SELECT * FROM messages")
+	for rows.Next() {
+		var ra message
+		err := rows.Scan(&ra.Id, &ra.Content, &ra.Senderid, &ra.Channelid, &ra.Isdeleted)
+		messages = append(messages, ra)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+}
+
 func main() {
 	Init()
 	ConvertDbUsers(&testing.T{})
@@ -54,6 +85,7 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/users", GetUsers)
+	router.GET("/messages", GetMessages)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
