@@ -46,6 +46,11 @@ func GetMessages(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, messages)
 }
 
+func AddUser(c *gin.Context) {
+	querry := "INSERT INTO users VALUES(?,?,?)"
+	DB.Exec(querry, "daad", "daad", "daad")
+}
+
 func Init() {
 	var err error
 	DB, err = sql.Open("sqlite3", "./bdd.db")
