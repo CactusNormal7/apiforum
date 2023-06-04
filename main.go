@@ -47,8 +47,17 @@ func GetMessages(c *gin.Context) {
 }
 
 func AddUser(c *gin.Context) {
-	querry := "INSERT INTO users VALUES(?,?,?)"
-	DB.Exec(querry, "daad", "daad", "daad")
+	stmt, err := DB.Prepare("INSERT INTO users (username, mail, password) VALUES (?, ?, ?)")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer stmt.Close()
+	stmt.Exec("dauybda", "d&ada", "audaz")
+
+	newUser := user{users[len(users)].Id + 1, "dauybda", "ada", "ada"}
+	if err := c.BindJSON(&newUser); err != nil {
+		return
+	}
 }
 
 func Init() {
@@ -86,12 +95,12 @@ func ConvertMsg(t *testing.T) {
 func main() {
 	Init()
 	ConvertDbUsers(&testing.T{})
+	ConvertMsg(&testing.T{})
 	// gin.SetMode(gin.ReleaseMode)
-	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/users", GetUsers)
 	router.GET("/messages", GetMessages)
-	router.POST("/adduser", AddUser)
+	router.GET("/adduser", AddUser)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
