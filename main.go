@@ -91,6 +91,7 @@ func main() {
 	router := gin.Default()
 	router.GET("/users", GetUsers)
 	router.GET("/messages", GetMessages)
+	router.POST("/adduser", AddUser)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
