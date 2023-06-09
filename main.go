@@ -52,12 +52,13 @@ func AddUser(c *gin.Context) {
 		log.Fatalln(err)
 	}
 	defer stmt.Close()
-	stmt.Exec("dauybda", "d&ada", "audaz")
+	username := c.PostForm("username")
+	mail := c.PostForm("mail")
+	password := c.PostForm("password")
+	stmt.Exec(username, mail, password)
 
-	newUser := user{users[len(users)].Id + 1, "dauybda", "ada", "ada"}
-	if err := c.BindJSON(&newUser); err != nil {
-		return
-	}
+	newUser := user{users[len(users)-1].Id + 1, "dauybda", "ada", "ada"}
+	users = append(users, newUser)
 }
 
 func Init() {
