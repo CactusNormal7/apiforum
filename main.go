@@ -52,13 +52,13 @@ func AddUser(c *gin.Context) {
 		log.Fatalln(err)
 	}
 	defer stmt.Close()
-	username := c.PostForm("username")
-	mail := c.PostForm("mail")
-	password := c.PostForm("password")
+	username := c.Query("username")
+	password := c.Query("password")
+	mail := c.Query("mail")
 	stmt.Exec(username, mail, password)
-
 	newUser := user{users[len(users)-1].Id + 1, username, username, username}
 	users = append(users, newUser)
+
 }
 
 func Init() {
@@ -97,7 +97,7 @@ func main() {
 	Init()
 	ConvertDbUsers(&testing.T{})
 	ConvertMsg(&testing.T{})
-	gin.SetMode(gin.ReleaseMode)
+	// gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/users", GetUsers)
 	router.GET("/messages", GetMessages)
