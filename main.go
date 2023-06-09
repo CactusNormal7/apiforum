@@ -57,7 +57,7 @@ func AddUser(c *gin.Context) {
 	password := c.PostForm("password")
 	stmt.Exec(username, mail, password)
 
-	newUser := user{users[len(users)-1].Id + 1, "dauybda", "ada", "ada"}
+	newUser := user{users[len(users)-1].Id + 1, username, username, username}
 	users = append(users, newUser)
 }
 
