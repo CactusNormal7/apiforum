@@ -6,13 +6,16 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/sessions"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 var DB *sql.DB
+var store = sessions.NewCookieStore([]byte("super-secret"))
 
 type user struct {
 	Id       int    `json:"id"`
@@ -61,6 +64,33 @@ func AddUser(c *gin.Context) {
 	users = append(users, newUser)
 }
 
+func RealDeleteUser(c *gin.Context) {
+	stmt, err := DB.Prepare("DELETE FROM users WHERE id = ?")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer stmt.Close()
+	idtodel := c.Query("id")
+	idToDelete, _ := strconv.Atoi(idtodel)
+	stmt.Exec(idToDelete)
+	ConvertDbUsers(&testing.T{})
+}
+
+func GetUserV(c *gin.Context) {
+	stmt, err := DB.Prepare("SELECT * FROM users WHERE username=?")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer stmt.Close()
+	username := c.Query("username")
+	var id int
+	var name string
+	var mail string
+	var pswd string
+	stmt.QueryRow(username).Scan(&id, &name, &mail, &pswd)
+	c.IndentedJSON(http.StatusOK, user{Id: id, Username: name, Mail: mail, Password: pswd})
+}
+
 func Init() {
 	var err error
 	DB, err = sql.Open("sqlite3", "./bdd.db")
@@ -70,6 +100,7 @@ func Init() {
 }
 
 func ConvertDbUsers(t *testing.T) {
+	users = []user{}
 	rows, _ := DB.Query("SELECT * FROM users")
 	for rows.Next() {
 		var ra user
@@ -97,11 +128,13 @@ func main() {
 	Init()
 	ConvertDbUsers(&testing.T{})
 	ConvertMsg(&testing.T{})
-	// gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/users", GetUsers)
 	router.GET("/messages", GetMessages)
 	router.GET("/adduser", AddUser)
+	router.GET("/rdeleteuser", RealDeleteUser)
+	router.GET("/getuserv", GetUserV)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
