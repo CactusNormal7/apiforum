@@ -60,7 +60,7 @@ func AddUser(c *gin.Context) {
 	mail := c.Query("mail")
 	stmt.Exec(username, mail, password)
 	var newUser user
-	newUser = user{users[len(users)-1].Id + 1, username, username, username}
+	newUser = user{users[len(users)-1].Id + 1, username, mail, password}
 	users = append(users, newUser)
 }
 
@@ -128,7 +128,7 @@ func main() {
 	Init()
 	ConvertDbUsers(&testing.T{})
 	ConvertMsg(&testing.T{})
-	gin.SetMode(gin.ReleaseMode)
+	// gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/users", GetUsers)
 	router.GET("/messages", GetMessages)
