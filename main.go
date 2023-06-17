@@ -91,6 +91,36 @@ func GetUserV(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, user{Id: id, Username: name, Mail: mail, Password: pswd})
 }
 
+func AddMsg(c *gin.Context) {
+	stmt, err := DB.Prepare("INSERT INTO messages (CONTENT, SENDERID, CHANNELID, ISDELETED ) VALUES (?, ?, ?, 0)")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer stmt.Close()
+	content := c.Query("content")
+	senderid, _ := strconv.Atoi(c.Query("senderid"))
+	channelid, _ := strconv.Atoi(c.Query("channelid"))
+	stmt.Exec(content, senderid, channelid)
+	newMsg := message{messages[len(messages)-1].Id + 1, content, senderid, channelid, 0}
+	messages = append(messages, newMsg)
+}
+
+func GetMsgsUsers(c *gin.Context) {
+	senderid := c.Query("senderid")
+	channelid := c.Query("channelid")
+	newmsg := []message{}
+	rows, _ := DB.Query("SELECT * FROM messages WHERE SENDERID=? and CHANNELID=?", senderid, channelid)
+	for rows.Next() {
+		var ra message
+		err := rows.Scan(&ra.Id, &ra.Content, &ra.Senderid, &ra.Channelid, &ra.Isdeleted)
+		newmsg = append(newmsg, ra)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+	c.IndentedJSON(http.StatusOK, newmsg)
+}
+
 func Init() {
 	var err error
 	DB, err = sql.Open("sqlite3", "./bdd.db")
@@ -135,6 +165,8 @@ func main() {
 	router.GET("/adduser", AddUser)
 	router.GET("/rdeleteuser", RealDeleteUser)
 	router.GET("/getuserv", GetUserV)
+	router.GET("/addmsg", AddMsg)
+	router.GET("/getmsgs", GetMsgsUsers)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
