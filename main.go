@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/sessions"
@@ -71,6 +72,40 @@ func AddUser(c *gin.Context) {
 	var newUser user
 	newUser = user{users[len(users)-1].Id + 1, username, mail, string(hashedPassword)}
 	users = append(users, newUser)
+
+	if username == "" || mail == "" || password == "" {
+		http.Error(c.Writer, "Veuillez remplir tous les champs du formulaire d'inscription", http.StatusBadRequest)
+		return
+	}
+
+	if !isStrongPassword(password) {
+		http.Error(c.Writer, "Le mot de passe doit contenir au moins 8 caractères, dont au moins une lettre majuscule, un chiffre et un caractère spécial", http.StatusBadRequest)
+		return
+	}
+
+	var count int
+	err = DB.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", username).Scan(&count)
+	if err != nil {
+		log.Println(err)
+		http.Error(c.Writer, "Erreur lors de la vérification du nom d'utilisateur", http.StatusInternalServerError)
+		return
+	}
+	if count > 0 {
+		http.Error(c.Writer, "Le nom d'utilisateur est déjà utilisé", http.StatusBadRequest)
+		return
+	}
+
+	err = DB.QueryRow("SELECT COUNT(*) FROM users WHERE mail = ?", mail).Scan(&count)
+	if err != nil {
+		log.Println(err)
+		http.Error(c.Writer, "Erreur lors de la vérification de l'adresse e-mail", http.StatusInternalServerError)
+		return
+	}
+	if count > 0 {
+		http.Error(c.Writer, "L'adresse e-mail est déjà utilisée", http.StatusBadRequest)
+		return
+	}
+
 }
 
 
@@ -87,29 +122,60 @@ func RealDeleteUser(c *gin.Context) {
 }
 
 func GetUserV(c *gin.Context) {
-	stmt, err := DB.Prepare("SELECT * FROM users WHERE username=?")
+	stmt, err := DB.Prepare("SELECT password FROM users WHERE username=?")
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer stmt.Close()
 	username := c.Query("username")
-	var id int
-	var name string
-	var mail string
-	var hashedPassword string
-	stmt.QueryRow(username).Scan(&id, &name, &mail, &hashedPassword)
-
-	password := c.Query("password")
-
-	// Comparaison du mot de passe entré avec le mot de passe haché
-	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+	var storedPassword string
+	err = stmt.QueryRow(username).Scan(&storedPassword)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	c.IndentedJSON(http.StatusOK, user{Id: id, Username: name, Mail: mail, HashedPassword: hashedPassword})
+	password := c.Query("password")
+
+	err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
+	if err != nil {
+		fmt.Fprintln(c.Writer, "Nom d'utilisateur ou mot de passe invalide !")
+		return
+	}
+
+	// Si la comparaison réussit, l'authentification est valide
+	c.IndentedJSON(http.StatusOK, gin.H{"message": "Authentification réussie"})
 }
 
+func isStrongPassword(password string) bool {
+	const (
+		minLength    = 8
+		minDigits    = 1
+		minSymbols   = 1
+		minUppercase = 1
+	)
+
+	if len(password) < minLength {
+		return false
+	}
+
+	var digits, symbols, uppercase int
+	for _, char := range password {
+		switch {
+		case unicode.IsDigit(char):
+			digits++
+		case unicode.IsSymbol(char) || unicode.IsPunct(char):
+			symbols++
+		case unicode.IsUpper(char):
+			uppercase++
+		}
+	}
+
+	if digits < minDigits || symbols < minSymbols || uppercase < minUppercase {
+		return false
+	}
+
+	return true
+}
 
 func AddMsg(c *gin.Context) {
 	stmt, err := DB.Prepare("INSERT INTO messages (CONTENT, SENDERID, CHANNELID, ISDELETED ) VALUES (?, ?, ?, 0)")
