@@ -102,6 +102,7 @@ func GetUserV(c *gin.Context) {
 }
 
 func AddMsg(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 	stmt, err := DB.Prepare("INSERT INTO messages (CONTENT, SENDERID, CHANNELID, ISDELETED ) VALUES (?, ?, ?, 0)")
 	if err != nil {
 		log.Fatalln(err)
@@ -160,6 +161,22 @@ func GetMsgsChannel(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, newmsg)
 }
 
+func GetChannelInfo(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+
+	stmt, err := DB.Prepare("SELECT * FROM channel WHERE id=?")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer stmt.Close()
+	channelid := c.Query("channelid")
+	var id int
+	var tittle string
+	var about string
+	stmt.QueryRow(channelid).Scan(&id, &tittle, &about)
+	c.IndentedJSON(http.StatusOK, channel{Id: id, Tittle: tittle, About: about})
+}
+
 func Init() {
 	var err error
 	DB, err = sql.Open("sqlite3", "./bdd.db")
@@ -173,7 +190,7 @@ func ConvertDbUsers(t *testing.T) {
 	rows, _ := DB.Query("SELECT * FROM users")
 	for rows.Next() {
 		var ra user
-		err := rows.Scan(&ra.Id, &ra.Mail, &ra.Username, &ra.Password)
+		err := rows.Scan(&ra.Id, &ra.Username, &ra.Mail, &ra.Password)
 		users = append(users, ra)
 		if err != nil {
 			log.Fatalln(err)
@@ -210,13 +227,14 @@ func main() {
 	ConvertDbUsers(&testing.T{})
 	ConvertMsg(&testing.T{})
 	ConvertDbChannels(&testing.T{})
-	gin.SetMode(gin.ReleaseMode)
+	// gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/users", GetUsers)
 	router.GET("/messages", GetMessages)
 	router.GET("/adduser", AddUser)
 	router.GET("/rdeleteuser", RealDeleteUser)
 	router.GET("/getuserv", GetUserV)
+	router.GET("/getchannelinfo", GetChannelInfo)
 	router.GET("/addmsg", AddMsg)
 	router.GET("/channels", GetChannels)
 	router.GET("/getmsgchannel", GetMsgsChannel)
