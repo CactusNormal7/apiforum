@@ -8,10 +8,12 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/sessions"
 	_ "github.com/mattn/go-sqlite3"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var DB *sql.DB
@@ -62,6 +64,93 @@ func AddUser(c *gin.Context) {
 	var newUser user
 	newUser = user{users[len(users)-1].Id + 1, username, mail, password}
 	users = append(users, newUser)
+
+	if username == "" || password == "" || mail == "" {
+		http.Error(c.Writer, "Veuillez remplir tous les champs du formulaire d'inscription", http.StatusBadRequest)
+		return
+	}
+
+	if !isStrongPassword(password) {
+		http.Error(c.Writer, "Le mot de passe doit contenir au moins 8 caractères, dont au moins une lettre majuscule, un chiffre et un caractère spécial", http.StatusBadRequest)
+		return
+	}
+
+	var count int
+	err = DB.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", username).Scan(&count)
+	if err != nil {
+		log.Println(err)
+		http.Error(c.Writer, "Erreur lors de la vérification du nom d'utilisateur", http.StatusInternalServerError)
+		return
+	}
+	if count > 0 {
+		http.Error(c.Writer, "Le nom d'utilisateur est déjà utilisé", http.StatusBadRequest)
+		return
+	}
+
+	err = DB.QueryRow("SELECT COUNT(*) FROM users WHERE mail = ?", mail).Scan(&count)
+	if err != nil {
+		log.Println(err)
+		http.Error(c.Writer, "Erreur lors de la vérification de l'adresse e-mail", http.StatusInternalServerError)
+		return
+	}
+	if count > 0 {
+		http.Error(c.Writer, "L'adresse e-mail est déjà utilisée", http.StatusBadRequest)
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println(err)
+		http.Error(c.Writer, "Erreur lors du cryptage du mot de passe", http.StatusInternalServerError)
+		return
+	}
+
+	stmt2, err := DB.Prepare("INSERT INTO users (username, password, mail) VALUES (?, ?, ?)")
+	if err != nil {
+		log.Println(err)
+		http.Error(c.Writer, "Erreur lors de la préparation de la requête d'insertion", http.StatusInternalServerError)
+		return
+	}
+	defer stmt2.Close()
+	tempoTable := []byte{}
+	_, err = stmt2.Exec(username, hashedPassword, mail)
+	if err != nil {
+		log.Println(err)
+		http.Error(c.Writer, "Erreur lors de l'insertion de l'utilisateur", http.StatusInternalServerError)
+		return
+	}
+	fmt.Fprintf(c.Writer, "L'utilisateur %s a été enregistré avec succès !", username)
+}
+
+func isStrongPassword(password string) bool {
+	const (
+		minLength    = 8
+		minDigits    = 1
+		minSymbols   = 1
+		minUppercase = 1
+	)
+
+	if len(password) < minLength {
+		return false
+	}
+
+	var digits, symbols, uppercase int
+	for _, char := range password {
+		switch {
+		case unicode.IsDigit(char):
+			digits++
+		case unicode.IsSymbol(char) || unicode.IsPunct(char):
+			symbols++
+		case unicode.IsUpper(char):
+			uppercase++
+		}
+	}
+
+	if digits < minDigits || symbols < minSymbols || uppercase < minUppercase {
+		return false
+	}
+
+	return true
 }
 
 func RealDeleteUser(c *gin.Context) {
@@ -125,53 +214,79 @@ func Init() {
 	var err error
 	DB, err = sql.Open("sqlite3", "./bdd.db")
 	if err != nil {
-		fmt.Printf("Error opening database: %v\n", err)
+		log.Fatalln(err)
 	}
-}
+	defer DB.Close()
+	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS users (ID INTEGER PRIMARY KEY AUTOINCREMENT, USERNAME TEXT, MAIL TEXT, PASSWORD TEXT);")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS channels (ID INTEGER PRIMARY KEY AUTOINCREMENT, ABOUT TEXT);")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS messages (ID INTEGER PRIMARY KEY AUTOINCREMENT, CONTENT TEXT, SENDERID INTEGER, CHANNELID INTEGER, ISDELETED INTEGER);")
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-func ConvertDbUsers(t *testing.T) {
-	users = []user{}
-	rows, _ := DB.Query("SELECT * FROM users")
+	rows, err := DB.Query("SELECT * FROM users")
+	if err != nil {
+		log.Fatalln(err)
+	}
 	for rows.Next() {
-		var ra user
-		err := rows.Scan(&ra.Id, &ra.Mail, &ra.Username, &ra.Password)
-		users = append(users, ra)
+		var u user
+		err = rows.Scan(&u.Id, &u.Username, &u.Mail, &u.Password)
 		if err != nil {
 			log.Fatalln(err)
 		}
+		users = append(users, u)
 	}
-}
 
-func ConvertMsg(t *testing.T) {
-	rows, _ := DB.Query("SELECT * FROM messages")
+	rows, err = DB.Query("SELECT * FROM channels")
+	if err != nil {
+		log.Fatalln(err)
+	}
 	for rows.Next() {
-		var ra message
-		err := rows.Scan(&ra.Id, &ra.Content, &ra.Senderid, &ra.Channelid, &ra.Isdeleted)
-		messages = append(messages, ra)
+		var c channel
+		err = rows.Scan(&c.Id, &c.About)
 		if err != nil {
 			log.Fatalln(err)
 		}
+		channels = append(channels, c)
+	}
+
+	rows, err = DB.Query("SELECT * FROM messages")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	for rows.Next() {
+		var m message
+		err = rows.Scan(&m.Id, &m.Content, &m.Senderid, &m.Channelid, &m.Isdeleted)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		messages = append(messages, m)
 	}
 }
 
 func main() {
 	Init()
-	ConvertDbUsers(&testing.T{})
-	ConvertMsg(&testing.T{})
-	// gin.SetMode(gin.ReleaseMode)
+
 	router := gin.Default()
+
 	router.GET("/users", GetUsers)
 	router.GET("/messages", GetMessages)
-	router.GET("/adduser", AddUser)
-	router.GET("/rdeleteuser", RealDeleteUser)
-	router.GET("/getuserv", GetUserV)
-	router.GET("/addmsg", AddMsg)
-	router.GET("/getmsgs", GetMsgsUsers)
+	router.GET("/users/:username", GetUserV)
+	router.POST("/users", AddUser)
+	router.POST("/messages", AddMsg)
+	router.DELETE("/users/:id", RealDeleteUser)
+	router.GET("/getmsgsusers/:senderid/:channelid", GetMsgsUsers)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	if err := router.Run(":" + port); err != nil {
-		log.Panicf("error: %s", err)
-	}
+
+	log.Fatal(http.ListenAndServe(":"+port, router))
 }
