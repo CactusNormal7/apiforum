@@ -33,8 +33,9 @@ type message struct {
 }
 
 type channel struct {
-	Id    int    `json:"id"`
-	About string `json:"about"`
+	Id     int    `json:"id"`
+	Tittle string `json:"tittle"`
+	About  string `json:"about"`
 }
 
 var users = []user{}
@@ -42,10 +43,17 @@ var messages = []message{}
 var channels = []channel{}
 
 func GetUsers(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 	c.IndentedJSON(http.StatusOK, users)
 }
 
+func GetChannels(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	c.IndentedJSON(http.StatusOK, channels)
+}
+
 func GetMessages(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 	c.IndentedJSON(http.StatusOK, messages)
 }
 
@@ -77,6 +85,8 @@ func RealDeleteUser(c *gin.Context) {
 }
 
 func GetUserV(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+
 	stmt, err := DB.Prepare("SELECT * FROM users WHERE username=?")
 	if err != nil {
 		log.Fatalln(err)
@@ -105,11 +115,40 @@ func AddMsg(c *gin.Context) {
 	messages = append(messages, newMsg)
 }
 
+func AddChannel(c *gin.Context) {
+	stmt, err := DB.Prepare("INSERT INTO channel(tittle, about) VALUES (?, ?)")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer stmt.Close()
+	tittle := c.Query("tittle")
+	about := c.Query("about")
+	stmt.Exec(tittle, about)
+	newChan := channel{channels[len(channels)-1].Id + 1, tittle, about}
+	channels = append(channels, newChan)
+}
+
 func GetMsgsUsers(c *gin.Context) {
 	senderid := c.Query("senderid")
 	channelid := c.Query("channelid")
 	newmsg := []message{}
 	rows, _ := DB.Query("SELECT * FROM messages WHERE SENDERID=? and CHANNELID=?", senderid, channelid)
+	for rows.Next() {
+		var ra message
+		err := rows.Scan(&ra.Id, &ra.Content, &ra.Senderid, &ra.Channelid, &ra.Isdeleted)
+		newmsg = append(newmsg, ra)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+	c.IndentedJSON(http.StatusOK, newmsg)
+}
+
+func GetMsgsChannel(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	channelid := c.Query("channelid")
+	newmsg := []message{}
+	rows, _ := DB.Query("SELECT * FROM messages WHERE CHANNELID=?", channelid)
 	for rows.Next() {
 		var ra message
 		err := rows.Scan(&ra.Id, &ra.Content, &ra.Senderid, &ra.Channelid, &ra.Isdeleted)
@@ -142,6 +181,18 @@ func ConvertDbUsers(t *testing.T) {
 	}
 }
 
+func ConvertDbChannels(t *testing.T) {
+	rows, _ := DB.Query("SELECT * FROM channel")
+	for rows.Next() {
+		var ra channel
+		err := rows.Scan(&ra.Id, &ra.Tittle, &ra.About)
+		channels = append(channels, ra)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+}
+
 func ConvertMsg(t *testing.T) {
 	rows, _ := DB.Query("SELECT * FROM messages")
 	for rows.Next() {
@@ -158,7 +209,8 @@ func main() {
 	Init()
 	ConvertDbUsers(&testing.T{})
 	ConvertMsg(&testing.T{})
-	// gin.SetMode(gin.ReleaseMode)
+	ConvertDbChannels(&testing.T{})
+	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/users", GetUsers)
 	router.GET("/messages", GetMessages)
@@ -166,7 +218,10 @@ func main() {
 	router.GET("/rdeleteuser", RealDeleteUser)
 	router.GET("/getuserv", GetUserV)
 	router.GET("/addmsg", AddMsg)
+	router.GET("/channels", GetChannels)
+	router.GET("/getmsgchannel", GetMsgsChannel)
 	router.GET("/getmsgs", GetMsgsUsers)
+	router.GET("/addchannel", AddChannel)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
