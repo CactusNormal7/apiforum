@@ -227,7 +227,7 @@ func main() {
 	ConvertDbUsers(&testing.T{})
 	ConvertMsg(&testing.T{})
 	ConvertDbChannels(&testing.T{})
-	// gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.GET("/users", GetUsers)
 	router.GET("/messages", GetMessages)
